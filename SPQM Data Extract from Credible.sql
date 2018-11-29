@@ -9,20 +9,15 @@
 --                Example  CMHC 07-2018.txt   or CMHC 1-7 2018.txt
 --                Please direct any questions to rlove@intelliprocess.com or (512) 420-8110
 --
---                *** CHANGE HARD CODED AGENCY CODE BELOW. ***
---
 --      Updates:  11/02/2018 - Created by Monica Seale (monica.seale@regionten.org) at Region Ten CSB.
+--                11/14/2018 - 1)  COMP (Agency Code) is no longer hard coded.  It's now looked up in the PartnerConfig table.
+--                             2)  Replaced DSM-5 Code with ICD-10 Code for DX1 - DX8 (diagnoses).
 -- -------------------------------------------------------------------------------------------------
 SET NOCOUNT ON
 
 -- Must DECLARE @param1 and @param2 if using Credible BI.
 DECLARE @param1 date = {?} -- Start Date
 DECLARE @param2 date = {?} -- End Date
-
--- EXECUTE permission required.
---DECLARE @agencycode varchar(5)
---SET @agencycode = dbo.f_partner_setting('partnercode')
-DECLARE @agencycode varchar(3) = '063' -- Region Ten CSB
 
 
 -- Build list of consumers with open 920 Type of Care/Episode in report period.
@@ -62,7 +57,9 @@ AND c3.deleted = 0
 
 
 -- Generate data extract.
-SELECT @agencycode AS [COMP]
+SELECT COALESCE((SELECT LTRIM(RTRIM(pc1.paramvalue))
+FROM PartnerConfig pc1
+WHERE pc1.parameter = 'partnercode'), '') AS [COMP]
 -- CASE is a Microsoft SQL Server reserved keyword.
 -- Include external_id?
 , CONVERT(varchar(10), cv1.client_id) AS [CASE]
@@ -92,7 +89,7 @@ END) AS [Gender]
 , CONVERT(varchar(5), cv1.rev_timeout, 114) AS [STOP]
 , CONVERT(varchar(10), cv1.duration) AS [CLIENTIME]
 -- Does lookup table exist in Credible?
--- Modify to use No Show form.
+-- Modify to use Cancellation/No-Show form.
 , (CASE pl1.visit_status
 WHEN 'ARRIVED' THEN '01'
 WHEN 'CANCELLED' THEN '02'
@@ -133,11 +130,13 @@ INNER JOIN Employees e2 ON e2.emp_id = es1.supervisor_emp_id
 WHERE es1.emp_id = e1.emp_id
 AND es1.is_indirect = 0
 ORDER BY e2.last_name + ', ' + e2.first_name ASC) AS [SUPERVISOR]
-, REPLACE(cv1.axis_code, '.', '') AS [DX1]
-, REPLACE(cv1.axis_code2, '.', '') AS [DX2]
-, REPLACE(cv1.axis_code3, '.', '') AS [DX3]
-, REPLACE(cv1.axis_code4, '.', '') AS [DX4]
-, REPLACE(cv1.axis_code5, '.', '') AS [DX5]
+-- DSM-5 Code = axis_code
+-- ICD-10 Code = icd10_code
+, REPLACE(cv1.icd10_code, '.', '') AS [DX1]
+, REPLACE(cv1.icd10_code2, '.', '') AS [DX2]
+, REPLACE(cv1.icd10_code3, '.', '') AS [DX3]
+, REPLACE(cv1.icd10_code4, '.', '') AS [DX4]
+, REPLACE(cv1.icd10_code5, '.', '') AS [DX5]
 , '' AS [DX6]
 , '' AS [DX7]
 , '' AS [DX8]
