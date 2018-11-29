@@ -12,6 +12,8 @@
 --      Updates:  11/02/2018 - Created by Monica Seale (monica.seale@regionten.org) at Region Ten CSB.
 --                11/14/2018 - 1)  COMP (Agency Code) is no longer hard coded.  It's now looked up in the PartnerConfig table.
 --                             2)  Replaced DSM-5 Code with ICD-10 Code for DX1 - DX8 (diagnoses).
+--                11/28/2018 - Changed DX1 - DX8 (diagnoses) to pull from the consumer's Problem List
+--                             instead of the service.
 -- -------------------------------------------------------------------------------------------------
 SET NOCOUNT ON
 
@@ -60,34 +62,54 @@ AND c3.deleted = 0
 SELECT COALESCE((SELECT LTRIM(RTRIM(pc1.paramvalue))
 FROM PartnerConfig pc1
 WHERE pc1.parameter = 'partnercode'), '') AS [COMP]
+
 -- CASE is a Microsoft SQL Server reserved keyword.
 -- Include external_id?
 , CONVERT(varchar(10), cv1.client_id) AS [CASE]
+
 -- PLACEHOLDER ONLY.  Do not populate until further notice.
 , '' AS [AlternateID]
+
 , CONVERT(varchar(10), c1.dob, 101) AS [DOB]
+
 , (CASE c1.sex
 WHEN 'F' THEN '01' -- Female
 WHEN 'M' THEN '02' -- Male
 ELSE '98' -- Not Collected (Not asked)
 END) AS [Gender]
+
 , p1.export_program_code AS [DIV]
+
 , CONVERT(varchar(10), cv1.program_id) AS [UNITNo]
+
 , p1.program_desc AS [UNIT]
+
 , '' AS [SUBUNITNo]
+
 , '' AS [SUBUNIT]
+
 -- Include external_id?
 , CONVERT(varchar(10), cv1.emp_id) AS [SERVER]
+
 , e1.last_name AS [LAST]
+
 , e1.first_name AS [FIRST]
+
 , e1.credentials AS [STAFFTYPE]
--- Use clientvisit_id instead?
+
+-- Use clientvisit_id instead?  No per Randy Love.
 , CONVERT(varchar(10), cv1.visittype_id) AS [SVCODE]
+
 , vt1.description AS [SERVICE]
+
 , CONVERT(varchar(10), cv1.rev_timein, 101) AS [DATE]
+
 , CONVERT(varchar(5), cv1.rev_timein, 114) AS [START]
+
 , CONVERT(varchar(5), cv1.rev_timeout, 114) AS [STOP]
+
 , CONVERT(varchar(10), cv1.duration) AS [CLIENTIME]
+
 -- Does lookup table exist in Credible?
 -- Modify to use Cancellation/No-Show form.
 , (CASE pl1.visit_status
@@ -105,7 +127,9 @@ WHEN 'SCHEDULED' THEN '11'
 WHEN 'WALK-IN' THEN '12'
 ELSE ''
 END) AS [APPT]
+
 , pl1.visit_status AS [APPOINTMENT]
+
 ,(CASE WHEN (SELECT COUNT(*) 
 FROM ClientInsurance ci1
 INNER JOIN Payer pa2 ON pa2.payer_id = ci1.payer_id
@@ -117,29 +141,97 @@ AND ci1.deleted = 0) = 0
 THEN 'N' -- No
 ELSE 'Y' -- Yes
 END) AS [MDCD]
+
 , cv1.cptcode AS [CPT]
+
 , (CASE WHEN pt1.payertype_code IS NOT NULL
 THEN pt1.payertype_code
 WHEN cv1.non_billable = 1
 THEN '96' -- Not Applicable
 ELSE '98' -- Not Collected (Not asked)
 END) AS [PAYORBILLED]
+
 , (SELECT TOP(1) e2.last_name + ', ' + e2.first_name AS emp_name
 FROM EmployeeSupervisor es1
 INNER JOIN Employees e2 ON e2.emp_id = es1.supervisor_emp_id
 WHERE es1.emp_id = e1.emp_id
 AND es1.is_indirect = 0
 ORDER BY e2.last_name + ', ' + e2.first_name ASC) AS [SUPERVISOR]
+
 -- DSM-5 Code = axis_code
 -- ICD-10 Code = icd10_code
-, REPLACE(cv1.icd10_code, '.', '') AS [DX1]
-, REPLACE(cv1.icd10_code2, '.', '') AS [DX2]
-, REPLACE(cv1.icd10_code3, '.', '') AS [DX3]
-, REPLACE(cv1.icd10_code4, '.', '') AS [DX4]
-, REPLACE(cv1.icd10_code5, '.', '') AS [DX5]
-, '' AS [DX6]
-, '' AS [DX7]
-, '' AS [DX8]
+, COALESCE((SELECT TOP(1) REPLACE(cad1.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca1
+INNER JOIN ClientAxisDetail cad1 ON cad1.client_axis_id = ca1.client_axis_id
+WHERE ca1.client_id = cv1.client_id
+AND ca1.active_flag = 1
+AND cad1.deleted = 0
+AND cad1.icd10_code IS NOT NULL
+AND cad1.problem_list_order = 1), '') AS [DX1]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad2.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca2
+INNER JOIN ClientAxisDetail cad2 ON cad2.client_axis_id = ca2.client_axis_id
+WHERE ca2.client_id = cv1.client_id
+AND ca2.active_flag = 1
+AND cad2.deleted = 0
+AND cad2.icd10_code IS NOT NULL
+AND cad2.problem_list_order = 2), '') AS [DX2]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad3.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca3
+INNER JOIN ClientAxisDetail cad3 ON cad3.client_axis_id = ca3.client_axis_id
+WHERE ca3.client_id = cv1.client_id
+AND ca3.active_flag = 1
+AND cad3.deleted = 0
+AND cad3.icd10_code IS NOT NULL
+AND cad3.problem_list_order = 3), '') AS [DX3]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad4.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca4
+INNER JOIN ClientAxisDetail cad4 ON cad4.client_axis_id = ca4.client_axis_id
+WHERE ca4.client_id = cv1.client_id
+AND ca4.active_flag = 1
+AND cad4.deleted = 0
+AND cad4.icd10_code IS NOT NULL
+AND cad4.problem_list_order = 4), '') AS [DX4]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad5.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca5
+INNER JOIN ClientAxisDetail cad5 ON cad5.client_axis_id = ca5.client_axis_id
+WHERE ca5.client_id = cv1.client_id
+AND ca5.active_flag = 1
+AND cad5.deleted = 0
+AND cad5.icd10_code IS NOT NULL
+AND cad5.problem_list_order = 5), '') AS [DX5]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad6.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca6
+INNER JOIN ClientAxisDetail cad6 ON cad6.client_axis_id = ca6.client_axis_id
+WHERE ca6.client_id = cv1.client_id
+AND ca6.active_flag = 1
+AND cad6.deleted = 0
+AND cad6.icd10_code IS NOT NULL
+AND cad6.problem_list_order = 6), '') AS [DX6]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad7.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca7
+INNER JOIN ClientAxisDetail cad7 ON cad7.client_axis_id = ca7.client_axis_id
+WHERE ca7.client_id = cv1.client_id
+AND ca7.active_flag = 1
+AND cad7.deleted = 0
+AND cad7.icd10_code IS NOT NULL
+AND cad7.problem_list_order = 7), '') AS [DX7]
+
+, COALESCE((SELECT TOP(1) REPLACE(cad8.icd10_code, '.', '') AS icd10_code
+FROM ClientAxis ca8
+INNER JOIN ClientAxisDetail cad8 ON cad8.client_axis_id = ca8.client_axis_id
+WHERE ca8.client_id = cv1.client_id
+AND ca8.active_flag = 1
+AND cad8.deleted = 0
+AND cad8.icd10_code IS NOT NULL
+AND cad8.problem_list_order = 8), '') AS [DX8]
+
 , (CASE WHEN cv1.client_id IN (SELECT * FROM @toc_923)
 THEN 'Y' -- Yes - Meets Criteria for ECM
 WHEN cv1.client_id IN (SELECT * FROM @toc_920)
